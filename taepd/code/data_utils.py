@@ -49,14 +49,16 @@ def load_dataset(dataset_path, dev_split=0.1):
     if not num_dev:
         return data, []  # no dev dataset
 
+    # dom_mapper: domain transition 횟수를 기준으로 dialogue_idx를 mapping하는 dict
     dom_mapper = defaultdict(list)
     for d in data:
         dom_mapper[len(d["domains"])].append(d["dialogue_idx"])
 
-    num_per_domain_trainsition = int(num_dev / 3)
+    num_per_domain_transition = int(num_dev / len(dom_mapper))  # 3은 domain 전이횟수 종류에 대한 hard coding?
+    # domain 전이횟수 종류를 같은 비율이 되도록 dev_idx 샘플링
     dev_idx = []
     for v in dom_mapper.values():
-        idx = random.sample(v, num_per_domain_trainsition)
+        idx = random.sample(v, num_per_domain_transition)  # random.sample(seq or set, n) s에서 비복원으로 n개 샘플링
         dev_idx.extend(idx)
 
     train_data, dev_data = [], []
@@ -66,6 +68,7 @@ def load_dataset(dataset_path, dev_split=0.1):
         else:
             train_data.append(d)
 
+    # turn 마다 state를 label화 하기 위한 작업
     dev_labels = {}
     for dialogue in dev_data:
         d_idx = 0
@@ -83,7 +86,7 @@ def load_dataset(dataset_path, dev_split=0.1):
 
     return train_data, dev_data, dev_labels
 
-
+ 
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
