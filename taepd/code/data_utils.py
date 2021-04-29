@@ -20,6 +20,13 @@ class OntologyDSTFeature:
     num_turn: int
     target_ids: Optional[List[int]]
 
+@dataclass
+class SUMBTInputFeature:
+    guid: str                       # dialogue_idx
+    input_ids: List[List[int]]      # Tokenized Dialogue context [[r_1, u_1], ...[r_T, u_T]]
+    segment_ids: List[List[int]]    # token_type_ids  user_token, padding = 0, system_token = 1
+    num_turn: int                   # T (해당 대화의 총 턴 길이)
+    target_ids: Optional[List[List[int]]]  # T * J (# of Slot Meta) (각 Slot 별로 Candidates의 ground-truth index)
 
 @dataclass
 class OpenVocabDSTFeature:
@@ -241,7 +248,7 @@ class DSTPreprocessor:
             new_arrays.append(m.unsqueeze(0))
 
         return torch.cat(new_arrays, 0)
-
+    # abstract method
     def _convert_example_to_feature(self):
         raise NotImplementedError
 
