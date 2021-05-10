@@ -11,16 +11,17 @@ def _evaluation(preds, labels, slot_meta):
 
     evaluator.init()
     assert len(preds) == len(labels)
-
+    batch_miss_labels = []
     for k, l in labels.items():
         p = preds.get(k)
         if p is None:
             raise Exception(f"{k} is not in the predictions!")
-        evaluator.update(l, p)
-
+        # evaluator.update(l, p)
+        miss_labels = evaluator.update(l, p)
+        batch_miss_labels.extend(miss_labels)
     result = evaluator.compute()
     print(result)
-    return result
+    return result, batch_miss_labels
 
 
 def evaluation(gt_path, pred_path):

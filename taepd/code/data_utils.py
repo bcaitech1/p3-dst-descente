@@ -30,11 +30,11 @@ class SUMBTInputFeature:
 
 @dataclass
 class OpenVocabDSTFeature:
-    guid: str
-    input_id: List[int]
-    segment_id: List[int]
-    gating_id: List[int]
-    target_ids: Optional[Union[List[int], List[List[int]]]]
+    guid: str                       # dialogue_idx + turn_idx  (dialogue_level=False 이므로 한 turn씩 append)
+    input_id: List[int]             # tokenized dialogue context  [r_1, u_1, ...r_T, u_T]
+    segment_id: List[int]           # token_type_ids(Optional) (Bert모델에서만 사용)
+    gating_id: List[int]            # J(# of Slot Meta)
+    target_ids: Optional[Union[List[int], List[List[int]]]]  # J * N (N: 각 Slot별로 tokenized target value)
 
 
 class WOSDataset(Dataset):
