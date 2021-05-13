@@ -13,7 +13,14 @@ from tqdm import tqdm
 
 import ruamel.yaml
 from easydict import EasyDict
+import re
 
+def remove_space(text):
+    text = re.sub("\( ", "(", text)
+    text = re.sub(" \)", ")", text)
+    text = re.sub(" = ", "=", text)
+    text = re.sub(" & ", "&", text)
+    return text
 
 @dataclass
 class OntologyDSTFeature:
@@ -293,3 +300,23 @@ class YamlConfigManager:
         if save_file_path:
             with open(save_file_path, 'w') as f:
                 ruamel.yaml.dump(dict(self.values), f)
+
+
+def custom_to_mask(input_ids):
+    SEP_ID = 3
+    MASK_ID = 4
+    for input_id in input_ids:
+        sep_idx = (input_id == SEP_ID).nonzero(as_tuple=False)[1]
+        if sep_idx - 3 > 4:
+            # for i in range(len(current_id)):
+            mask_idxs = set()
+            while len(mask_idxs) <= 3:
+                rand_idx = random.randrange(2, sep_idx)
+                if rand_idx == sep_idx:
+                    continue
+                mask_idxs.add(rand_idx)
+
+            for mask_idx in list(mask_idxs):
+                input_id[mask_idx] = MASK_ID
+
+    return input_ids

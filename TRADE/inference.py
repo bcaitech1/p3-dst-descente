@@ -1,19 +1,23 @@
 import argparse
 import os
 import json
+import pickle
+import random
 
 import torch
 import wandb
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
-from transformers import BertTokenizer, AutoTokenizer, AutoConfig
+from transformers import BertTokenizer, AutoTokenizer, AutoConfig, BertTokenizerFast
 
-from data_utils import (WOSDataset, get_examples_from_dialogues, YamlConfigManager)
+from data_utils import (WOSDataset, get_examples_from_dialogues, YamlConfigManager, custom_to_mask)
 from model import TRADE
 from preprocessor import TRADEPreprocessor
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 
 def masked_cross_entropy_for_value(logits, target, pad_idx=0):
     mask = target.ne(pad_idx)
@@ -52,14 +56,14 @@ def inference(model, eval_loader, processor, device):
             # all_point_outputs, all_gate_outputs
             o, g = model(input_ids, segment_ids, input_masks, 9)
 
-            # loss_1 = loss_fnc_1(o.contiguous(), target_ids.contiguous().view(-1))
-            # loss_2 = loss_fnc_2(g.contiguous().view(-1, 5), gating_ids.contiguous().view(-1))
-            # loss = loss_1 + loss_2
-            # wandb.log({
-            #     "eval/loss": loss.item(),
-            #     "eval/gen_loss": loss_1.item(),
-            #     "eval/gate_loss": loss_2.item(),
-            # })
+            loss_1 = loss_fnc_1(o.contiguous(), target_ids.contiguous().view(-1))
+            loss_2 = loss_fnc_2(g.contiguous().view(-1, 5), gating_ids.contiguous().view(-1))
+            loss = loss_1 + loss_2
+            wandb.log({
+                "eval/loss": loss.item(),
+                "eval/gen_loss": loss_1.item(),
+                "eval/gate_loss": loss_2.item(),
+            })
 
             _, generated_ids = o.max(-1)
             _, gated_ids = g.max(-1)
@@ -79,14 +83,16 @@ if __name__ == "__main__":
     cfg = YamlConfigManager(args.config_file_path, args.config).values
 
     DATA_DIR = "../input/data/eval_dataset"
-    OUTPUT_DIR = "./results"
-    MODEL_DIR = "./results/swept-breeze-33-best.pth"
+    OUTPUT_DIR = "./results/proud-sun-41"
+    MODEL_DIR = "./best.pth"
 
     # Data Loading
     eval_data = json.load(open(f"{DATA_DIR}/eval_dials.json", "r"))
     slot_meta = json.load(open(f"{cfg.data_dir}/slot_meta.json"))
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
+
+    # Dealing with long texts The maximum sequence length of BERT is 512.
     processor = TRADEPreprocessor(slot_meta, tokenizer, max_seq_length=512)
 
     eval_examples = get_examples_from_dialogues(
@@ -94,7 +100,15 @@ if __name__ == "__main__":
     )
 
     # Extracting Featrues
-    eval_features = processor.convert_examples_to_features(eval_examples)
+    #eval_features = processor.convert_examples_to_features(eval_examples)
+    #eval_features = processor.custom_convert_examples_to_features(eval_examples)
+    if cfg.mask:
+        with open('mask_seg_eval_features.txt', 'rb') as f:
+            eval_features = pickle.load(f)  # 단 한줄씩 읽어옴
+    else:
+        with open('seg_id_eval_features.txt', 'rb') as f:
+            eval_features = pickle.load(f)
+
     eval_data = WOSDataset(eval_features)
     eval_sampler = SequentialSampler(eval_data)
     eval_loader = DataLoader(

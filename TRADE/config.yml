@@ -15,9 +15,85 @@ base:
   model_name_or_path: 'dsksd/bert-ko-small-minimal'
   proj_dim: None # 만약 지정되면 기존의 hidden_size는 embedding dimension으로 취급되고, proj_dim이 GRU의 hidden_size로 사용됨. hidden_size보다 작아야 함.
 
+  # 추가 변수
+  tag: ["trade"]
+  use_kfold: False
+  num_k: 0
+  val_ratio: 0.1
+  scheduler: "Linear"
+
+test1:
+  data_dir: "../input/data/train_dataset"
+  model_dir: "results"
+  train_batch_size: 12
+  eval_batch_size: 8
+  learning_rate: 3e-4
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  num_train_epochs: 30
+  warmup_ratio: 0.1
+  random_seed: 42
+  n_gate: 5
+  teacher_forcing_ratio: 0.5
+
+  model_name_or_path: 'dsksd/bert-ko-small-minimal'
+  proj_dim: None # 만약 지정되면 기존의 hidden_size는 embedding dimension으로 취급되고, proj_dim이 GRU의 hidden_size로 사용됨. hidden_size보다 작아야 함.
 
   # 추가 변수
   tag: ["trade"]
   use_kfold: False
   num_k: 0
   val_ratio: 0.1
+  scheduler: "ReduceLROnPlateau"
+  add_mask: False
+
+
+test2:
+  data_dir: "../input/data/train_dataset"
+  model_dir: "results"
+  train_batch_size: 12
+  eval_batch_size: 8
+  learning_rate: 5e-5
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  num_train_epochs: 30
+  warmup_ratio: 0.0
+  random_seed: 42
+  n_gate: 5
+  teacher_forcing_ratio: 0.5
+
+  model_name_or_path: 'dsksd/bert-ko-small-minimal'
+  proj_dim: None # 만약 지정되면 기존의 hidden_size는 embedding dimension으로 취급되고, proj_dim이 GRU의 hidden_size로 사용됨. hidden_size보다 작아야 함.
+
+  # 추가 변수
+  tag: ["trade"]
+  use_kfold: False
+  num_k: 0
+  val_ratio: 0.1
+  scheduler: "Linear"
+  add_mask: False
+
+test3:
+  data_dir: "../input/data/train_dataset"
+  model_dir: "results"
+  train_batch_size: 4
+  eval_batch_size: 8
+  learning_rate: 3e-5
+  adam_epsilon: 1e-8
+  max_grad_norm: 1.0
+  num_train_epochs: 30
+  warmup_ratio: 0.0
+  random_seed: 42
+  n_gate: 5
+  teacher_forcing_ratio: 0.5
+
+  model_name_or_path: 'dsksd/bert-ko-small-minimal'
+  proj_dim: None # 만약 지정되면 기존의 hidden_size는 embedding dimension으로 취급되고, proj_dim이 GRU의 hidden_size로 사용됨. hidden_size보다 작아야 함.
+
+  # 추가 변수
+  tag: ["trade"]
+  use_kfold: False
+  num_k: 0
+  val_ratio: 0.1
+  scheduler: "Linear"
+  mask: True
