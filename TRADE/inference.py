@@ -83,8 +83,8 @@ if __name__ == "__main__":
     cfg = YamlConfigManager(args.config_file_path, args.config).values
 
     DATA_DIR = "../input/data/eval_dataset"
-    OUTPUT_DIR = "./results/proud-sun-41"
-    MODEL_DIR = "./best.pth"
+    OUTPUT_DIR = "./results/vague-sky-62"
+    MODEL_DIR = OUTPUT_DIR+"/best.pth"
 
     # Data Loading
     eval_data = json.load(open(f"{DATA_DIR}/eval_dials.json", "r"))
