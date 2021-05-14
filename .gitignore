@@ -133,7 +133,7 @@ dmypy.json
 *.bin
 
 # raw_data folder
-raw_dada/
+raw_data/
 
 # wandb log file
 wandb/
