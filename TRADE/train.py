@@ -9,11 +9,11 @@ import torch.nn as nn
 
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm
-from transformers import AdamW, BertTokenizer, get_linear_schedule_with_warmup, AutoTokenizer, AutoConfig, BertTokenizerFast
+from transformers import AdamW, get_linear_schedule_with_warmup, AutoTokenizer, AutoConfig
 
 from data_utils import (YamlConfigManager, WOSDataset, get_examples_from_dialogues, load_dataset,
-                        set_seed, custom_to_mask, )
-from eval_utils import DSTEvaluator
+                        set_seed, custom_to_mask, custom_get_examples_from_dialogues, )
+
 from evaluation import _evaluation
 from inference import inference
 from model import TRADE, masked_cross_entropy_for_value
@@ -70,10 +70,10 @@ if __name__ == "__main__":
     slot_meta = json.load(open(f"{cfg.data_dir}/slot_meta.json"))
     train_data, dev_data, dev_labels = load_dataset(train_data_file, cfg.val_ratio)
 
-    train_examples = get_examples_from_dialogues(
+    train_examples = custom_get_examples_from_dialogues(
         train_data, user_first=False, dialogue_level=False
     )
-    dev_examples = get_examples_from_dialogues(
+    dev_examples = custom_get_examples_from_dialogues(
         dev_data, user_first=False, dialogue_level=False
     )
 
@@ -81,19 +81,33 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
 
     # Dealing with long texts The maximum sequence length of BERT is 512.
-    processor = TRADEPreprocessor(slot_meta, tokenizer, max_seq_length=512)
+    processor = TRADEPreprocessor(slot_meta, tokenizer, max_seq_length=512, n_gate=cfg.n_gate)
 
     # Extracting Featrues
     cpprint('Extracting Features...')
-    #train_features = processor.convert_examples_to_features(train_examples)
-    #dev_features = processor.convert_examples_to_features(dev_examples)
-    # train_features = processor.custom_convert_examples_to_features(train_examples)
-    # dev_features = processor.custom_convert_examples_to_features(dev_examples)
+    train_features = processor.sep_custom_convert_examples_to_features(train_examples)
+    dev_features = processor.sep_custom_convert_examples_to_features(dev_examples)
 
-    with open('seg_id_train_features.txt', 'rb') as f:
-         train_features = pickle.load(f)
-    with open('seg_id_dev_features.txt', 'rb') as f:
-         dev_features = pickle.load(f)
+    # 전체 train data InputFeatur 저장
+    with open('gate5_sep_train_features.txt', 'wb') as f:
+        pickle.dump(train_features, f)
+    with open('gate5_sep_dev_features.txt', 'wb') as f:
+        pickle.dump(dev_features, f)
+
+#     if cfg.n_gate == 3:
+#         with open('gate3_seg_id_train_features.txt', 'rb') as f:
+#              train_features = pickle.load(f)
+#         with open('gate3_seg_id_dev_features.txt', 'rb') as f:
+#              dev_features = pickle.load(f)
+#    
+#     else: # n_gate = 5
+#         with open('gate5_sep_train_features.txt', 'rb') as f:
+#             train_features = pickle.load(f)
+#         with open('gate5_sep_dev_features.txt', 'rb') as f:
+#             dev_features = pickle.load(f)
+
+
+
 
     # Slot Meta tokenizing for the decoder initial inputs
     tokenized_slot_meta = []
@@ -185,6 +199,7 @@ if __name__ == "__main__":
 
     # 모델 저장될 파일 위치 생성
     if not os.path.exists(f"{cfg.model_dir}/{wandb.run.name}"):
+        os.mkdir(f"{cfg.model_dir}")
         os.mkdir(f"{cfg.model_dir}/{wandb.run.name}")
 
     # json data 직렬화
@@ -237,6 +252,7 @@ if __name__ == "__main__":
                     input_ids, segment_ids, input_masks, target_ids.size(-1), tf
                 )
 
+
                 # generation loss
                 loss_1 = loss_fnc_1(
                     all_point_outputs.contiguous(),
@@ -249,6 +265,7 @@ if __name__ == "__main__":
                     all_gate_outputs.contiguous().view(-1, cfg.n_gate),
                     gating_ids.contiguous().view(-1),
                 )
+
                 loss = loss_1 + loss_2
             batch_loss.append(loss.item())
 
@@ -282,7 +299,7 @@ if __name__ == "__main__":
                     "train/gate_loss": loss_2.item(),
                 })
 
-        predictions = inference(model, dev_loader, processor, device)
+        predictions = inference(model, dev_loader, processor, device, cfg.n_gate)
         eval_result = _evaluation(predictions, dev_labels, slot_meta)
         if cfg.scheduler == "ReduceLROnPlateau":
             scheduler.step(eval_result["joint_goal_accuracy"])
@@ -301,9 +318,19 @@ if __name__ == "__main__":
             cpprint(f"--Update Best checkpoint!, epoch: {epoch+1}")
             best_score = eval_result['joint_goal_accuracy']
             best_checkpoint = epoch
-            # if not os.path.isdir(cfg.model_dir):
-            #     os.makedirs(cfg.model_dir)
+
+            print("--Saving best model checkpoint")
             torch.save(model.state_dict(), f"{cfg.model_dir}/{wandb.run.name}/best.pth")
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler.state_dict': scheduler.state_dict(),
+                'loss': loss.item(),
+                'gen_loss': loss_1.item(),
+                'gate_loss': loss_2.item(),
+            }, os.path.join(f"{cfg.model_dir}/{wandb.run.name}", "training_best_checkpoint.bin"))
+
 
 
         torch.save(model.state_dict(), f"{cfg.model_dir}/{wandb.run.name}/last.pth")
