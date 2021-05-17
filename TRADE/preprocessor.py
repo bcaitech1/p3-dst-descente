@@ -13,19 +13,24 @@ class TRADEPreprocessor(DSTPreprocessor):
         trg_tokenizer=None,
         ontology=None,
         max_seq_length=512,
+        n_gate=None,
 
     ):
         self.slot_meta = slot_meta
         self.src_tokenizer = src_tokenizer
         self.trg_tokenizer = trg_tokenizer if trg_tokenizer else src_tokenizer
         self.ontology = ontology
-        #self.gating2id = {"none": 0, "dontcare": 1, "ptr": 2}
-        self.gating2id = {"none": 0, "dontcare": 1, "yes": 2, "no": 3, "ptr": 4}
+        self.n_gate = n_gate
+        if self.n_gate == 3:
+            self.gating2id = {"none": 0, "dontcare": 1, "ptr": 2}
+        else:
+            self.gating2id = {"none": 0, "dontcare": 1, "yes": 2, "no": 3, "ptr": 4}
         self.id2gating = {v: k for k, v in self.gating2id.items()}
         self.max_seq_length = max_seq_length
 
 
     def _custom_convert_example_to_feature(self, example):
+        # 모든 발화를 [SEP] 으로 구분
         context = " [SEP] ".join(example.context_turns) + " [SEP] "
         current = " [SEP] ".join(example.current_turn)
         context_id = self.src_tokenizer.encode(context, add_special_tokens=False)
@@ -123,13 +128,14 @@ class TRADEPreprocessor(DSTPreprocessor):
             if self.id2gating[gate] == "none":
                 continue
 
-            # if self.id2gating[gate] == "dontcare":
-            #     recovered.append("%s-%s" % (slot, "dontcare"))  # slot-dontcare
-            #     continue
-
-            if self.id2gating[gate] in ["dontcare", "yes", "no"]:
-                recovered.append("%s-%s" % (slot, self.id2gating[gate]))
-                continue
+            if self.n_gate == 3:
+                if self.id2gating[gate] == "dontcare":
+                    recovered.append("%s-%s" % (slot, "dontcare"))  # slot-dontcare
+                    continue
+            else:
+                if self.id2gating[gate] in ["dontcare", "yes", "no"]:
+                    recovered.append("%s-%s" % (slot, self.id2gating[gate]))
+                    continue
 
             # ptr인 경우 generation된 결과를 사용한다
             token_id_list = []
