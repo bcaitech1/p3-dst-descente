@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 from transformers import BertTokenizer, AutoTokenizer, AutoConfig, BertTokenizerFast
 
-from data_utils import (WOSDataset, get_examples_from_dialogues, YamlConfigManager, custom_to_mask)
+from data_utils import (WOSDataset, get_examples_from_dialogues, YamlConfigManager, custom_to_mask,
+                        custom_get_examples_from_dialogues)
 from model import TRADE
 from preprocessor import TRADEPreprocessor
 
@@ -41,7 +42,7 @@ def postprocess_state(state):
     return state
 
 
-def inference(model, eval_loader, processor, device):
+def inference(model, eval_loader, processor, device, n_gate):
     model.eval()
     predictions = {}
     loss_fnc_1 = masked_cross_entropy_for_value  # generation
@@ -57,7 +58,10 @@ def inference(model, eval_loader, processor, device):
             o, g = model(input_ids, segment_ids, input_masks, 9)
 
             loss_1 = loss_fnc_1(o.contiguous(), target_ids.contiguous().view(-1))
-            loss_2 = loss_fnc_2(g.contiguous().view(-1, 5), gating_ids.contiguous().view(-1))
+            if n_gate == 3:
+                loss_2 = loss_fnc_2(g.contiguous().view(-1, 3), gating_ids.contiguous().view(-1))
+            else:
+                loss_2 = loss_fnc_2(g.contiguous().view(-1, 5), gating_ids.contiguous().view(-1))
             loss = loss_1 + loss_2
             wandb.log({
                 "eval/loss": loss.item(),
@@ -83,8 +87,8 @@ if __name__ == "__main__":
     cfg = YamlConfigManager(args.config_file_path, args.config).values
 
     DATA_DIR = "../input/data/eval_dataset"
-    OUTPUT_DIR = "./results/vague-sky-62"
-    MODEL_DIR = OUTPUT_DIR+"/best.pth"
+    OUTPUT_DIR = "./results/still-snowflake-102"
+    MODEL_DIR = OUTPUT_DIR + "/best.pth"
 
     # Data Loading
     eval_data = json.load(open(f"{DATA_DIR}/eval_dials.json", "r"))
@@ -93,21 +97,23 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name_or_path)
 
     # Dealing with long texts The maximum sequence length of BERT is 512.
-    processor = TRADEPreprocessor(slot_meta, tokenizer, max_seq_length=512)
+    processor = TRADEPreprocessor(slot_meta, tokenizer, max_seq_length=512, n_gate=cfg.n_gate)
 
-    eval_examples = get_examples_from_dialogues(
+    eval_examples = custom_get_examples_from_dialogues(
         eval_data, user_first=False, dialogue_level=False
     )
 
     # Extracting Featrues
     #eval_features = processor.convert_examples_to_features(eval_examples)
-    #eval_features = processor.custom_convert_examples_to_features(eval_examples)
-    if cfg.mask:
-        with open('mask_seg_eval_features.txt', 'rb') as f:
-            eval_features = pickle.load(f)  # 단 한줄씩 읽어옴
-    else:
-        with open('seg_id_eval_features.txt', 'rb') as f:
-            eval_features = pickle.load(f)
+    #eval_features = processor.sep_custom_convert_examples_to_features(eval_examples)
+    # if cfg.n_gate == 3:
+    #     with open('gate3_seg_id_eval_features.txt', 'rb') as f:
+    #         eval_features = pickle.load(f)  # 단 한줄씩 읽어옴
+    # else:  # gate = 5
+    #     with open('seg_id_eval_features.txt', 'rb') as f:
+    #         eval_features = pickle.load(f)
+    with open('gate5_sep_eval_features.txt', 'rb') as f:
+        eval_features = pickle.load(f)
 
     eval_data = WOSDataset(eval_features)
     eval_sampler = SequentialSampler(eval_data)
@@ -137,7 +143,7 @@ if __name__ == "__main__":
     model.to(device)
     print("Model is loaded")
 
-    predictions = inference(model, eval_loader, processor, device)
+    predictions = inference(model, eval_loader, processor, device, cfg.n_gate)
 
     if not os.path.exists(OUTPUT_DIR):
         os.mkdir(OUTPUT_DIR)
