@@ -221,6 +221,58 @@ def get_examples_from_dialogues(data, user_first=False, dialogue_level=False):
     return examples
 
 
+
+def custom_get_example_from_dialogue(dialogue, user_first=False):
+    """
+    system 발화 뒤에 " # ", user 발화 뒤에 " * " 를 붙여서 구분하는 함수
+    """
+    guid = dialogue["dialogue_idx"]
+    examples = []
+    history = []
+    d_idx = 0
+    for idx, turn in enumerate(dialogue["dialogue"]):
+        if turn["role"] != "user":
+            continue
+
+        if idx:
+            sys_utter = dialogue["dialogue"][idx - 1]["text"]
+        else:
+            sys_utter = ""
+
+        user_utter = turn["text"]
+        state = turn.get("state")
+        context = deepcopy(history)
+        if user_first:
+            current_turn = [user_utter, sys_utter]
+        else:
+            current_turn = [sys_utter, " # ", user_utter, " * "]
+        examples.append(
+            DSTInputExample(
+                guid=f"{guid}-{d_idx}",
+                context_turns=context,
+                current_turn=current_turn,
+                label=state,
+            )
+        )
+        history.append(sys_utter)
+        history.append(" # ")
+        history.append(user_utter)
+        history.append(" * ")
+        d_idx += 1
+    return examples
+
+
+def custom_get_examples_from_dialogues(data, user_first=False, dialogue_level=False):
+    examples = []
+    for d in tqdm(data):
+        example = custom_get_example_from_dialogue(d, user_first=user_first)
+        if dialogue_level:
+            examples.append(example)
+        else:
+            examples.extend(example)
+    return examples
+
+
 class DSTPreprocessor:
     def __init__(self, slot_meta, src_tokenizer, trg_tokenizer=None, ontology=None):
         self.slot_meta = slot_meta
