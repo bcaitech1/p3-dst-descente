@@ -1,13 +1,17 @@
 import argparse
 import os
 import json
+import re
+import pickle
+import random
 
 import torch
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 from transformers import BertTokenizer
+import wandb
 
-from data_utils import (WOSDataset, get_examples_from_dialogues)
+from data_utils import (WOSDataset, get_examples_from_dialogues, YamlConfigManager, custom_to_mask)
 from model import TRADE
 from preprocessor import TRADEPreprocessor
 
@@ -15,23 +19,52 @@ from preprocessor import TRADEPreprocessor
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def masked_cross_entropy_for_value(logits, target, pad_idx=0):
+    mask = target.ne(pad_idx)
+    logits_flat = logits.view(-1, logits.size(-1))
+    log_probs_flat = torch.log(logits_flat)
+    target_flat = target.view(-1, 1)
+    losses_flat = -torch.gather(log_probs_flat, dim=1, index=target_flat)
+    losses = losses_flat.view(*target.size())
+    losses = losses * mask.float()
+    loss = losses.sum() / (mask.sum().float())
+    return loss
+
 def postprocess_state(state):
     for i, s in enumerate(state):
         s = s.replace(" : ", ":")
+        s = re.sub('\s(?=[\=\(\)\&])|(?<=[\=\(\)\&])\s', "", s)  # =&() 의 문자간 공백 제거
+        s = re.sub('(?<=역)역*', "", s)
         state[i] = s.replace(" , ", ", ")
+
     return state
 
 
-def inference(model, eval_loader, processor, device):
+def inference(model, eval_loader, processor, device, n_gate):
     model.eval()
     predictions = {}
+    loss_fnc_1 = masked_cross_entropy_for_value  # generation
+    loss_fnc_2 = torch.nn.CrossEntropyLoss()  # gating
     for batch in tqdm(eval_loader):
         input_ids, segment_ids, input_masks, gating_ids, target_ids, guids = [
             b.to(device) if not isinstance(b, list) else b for b in batch
         ]
 
         with torch.no_grad():
+            # all_point_outputs, all_gate_outputs
             o, g = model(input_ids, segment_ids, input_masks, 9)
+
+            loss_1 = loss_fnc_1(o.contiguous(), target_ids.contiguous().view(-1))
+            if n_gate == 3:
+                loss_2 = loss_fnc_2(g.contiguous().view(-1, 3), gating_ids.contiguous().view(-1))
+            else:
+                loss_2 = loss_fnc_2(g.contiguous().view(-1, 5), gating_ids.contiguous().view(-1))
+            loss = loss_1 + loss_2
+            wandb.log({
+                "eval/loss": loss.item(),
+                "eval/gen_loss": loss_1.item(),
+                "eval/gate_loss": loss_2.item(),
+            })
 
             _, generated_ids = o.max(-1)
             _, gated_ids = g.max(-1)
