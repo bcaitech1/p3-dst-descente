@@ -31,7 +31,7 @@ OP_SET = {
 def make_turn_label(slot_meta, last_dialog_state, turn_dialog_state,
                     tokenizer, op_code='4', dynamic=False):
     if dynamic:
-        gold_state = turn_dialog_state
+        gold_state = turn_dialog_state  # {'관광-종류': '공원', '관광-지역': 'dontcare'}
         turn_dialog_state = {}
         for x in gold_state:
             s = x.split('-')
@@ -40,9 +40,9 @@ def make_turn_label(slot_meta, last_dialog_state, turn_dialog_state,
 
     op_labels = ['carryover'] * len(slot_meta)
     generate_y = []
-    keys = list(turn_dialog_state.keys())
+    keys = list(turn_dialog_state.keys())  # ('관광-종류', '관광-지역')
     for k in keys:
-        v = turn_dialog_state[k] # 이번 대화의 slot value
+        v = turn_dialog_state[k] # 이번 대화의 slot value  # '공원'
         # print('############')
         # print('v: ', v)
         # print('############')
@@ -65,12 +65,12 @@ def make_turn_label(slot_meta, last_dialog_state, turn_dialog_state,
                 else:
                     op_labels[idx] = 'update'
                     generate_y.append([tokenizer.tokenize(v) + ['[EOS]'], idx])
-            elif vv == v: # 이전 op_label과 같으면 carryover
+            elif vv == v: # 이전 slot value와 같으면 carryover
                 op_labels[idx] = 'carryover'
         except ValueError:
             continue
-
-    for k, v in last_dialog_state.items():
+    
+    for k, v in last_dialog_state.items():  # {'관광-종류': '공원'}
         vv = turn_dialog_state.get(k)
         try:
             idx = slot_meta.index(k)
@@ -171,12 +171,15 @@ def prepare_dataset(data_path, tokenizer, slot_meta,
         dialog_history = []
         last_dialog_state = {}
         last_uttr = ""
+        tmp = 0  # WOS 변환 때문에 임시적으로 추가한 변수
         for ti, turn in enumerate(dial_dict["dialogue"]): # 
             turn_domain = turn["domain"]
-            if turn_domain not in EXPERIMENT_DOMAINS:
-                continue
+            if turn_domain not in EXPERIMENT_DOMAINS:  # turn domain이 없는 경우 (ex)그냥 인사만 한 상태) "" 빈 문자열 처리할 경우 여기서 누락되는 문제 생김 
+                if turn["turn_idx"] == 0:  # 임시 추가 코드   index가 1부터 시작하게 되면서, 새 dialogue처리가 제대로 안됨. last_dialogue_state 를 evaluation에서 초기화 못함                                                     
+                    tmp -= 1                # 임시 추가 코드   그렇다고 임의의 도메인을 넣기도 애매하니, 전체적으로 1씩 낮춰줌
+                continue                               
             
-            turn_id = turn["turn_idx"]
+            turn_id = turn["turn_idx"] + tmp
             turn_uttr = (turn["system_transcript"] + ' ; ' + turn["transcript"]).strip()
             # turn_uttr = (turn["transcript"] + ' ; ' + turn["system_transcript"]).strip()
             dialog_history.append(last_uttr)

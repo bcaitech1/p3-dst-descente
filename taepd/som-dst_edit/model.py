@@ -32,10 +32,18 @@ class SomDST(PreTrainedModel):
 
         domain_scores, state_scores, decoder_inputs, sequence_output, pooled_output = enc_outputs
         
+        # print('domain_scores:' ,domain_scores.isnan().any())
+        # print('state_scores:' ,state_scores.isnan().any())
+        # print('decoder_input:' , decoder_inputs.isnan().any())
+        # print('seqeunce_output:' , sequence_output.isnan().any())
+        # print('pooled_output:' , pooled_output.isnan().any())
+
+
         ######## DECODER OUTPUT ########
         gen_scores = self.decoder(input_ids, decoder_inputs, sequence_output,
                                   pooled_output, max_value, teacher)
 
+        # print('gen_scores:' , gen_scores.isnan().any())
         return domain_scores, state_scores, gen_scores
 
 
@@ -61,18 +69,25 @@ class Encoder(nn.Module):
     def forward(self, input_ids, token_type_ids,
                 state_positions, attention_mask,
                 op_ids=None, max_update=None):
-        bert_outputs = self.bert(input_ids, token_type_ids, attention_mask)[0] # Batch x Max_Seq_length x hidden size
+        bert_outputs = self.bert(input_ids, token_type_ids, attention_mask)
+        # print('input_ids:' , input_ids.isnan().any())
+        # print('token_type_ids:' , token_type_ids.isnan().any())
+        # print('attention_mask:' , attention_mask.isnan().any())
+
+        # bert_outputs = self.bert(input_ids, token_type_ids, attention_mask)[0] # Batch x Max_Seq_length x hidden size
         # print(bert_outputs.dtype)
         # print('::::OUTPUT::::')
         # print(bert_outputs)
         # print('::::OUTPUT SHAPE:::')
         # print(bert_outputs.shape)
         # print()
-        # sequence_output, pooled_output = bert_outputs[:2]
-        sequence_output = bert_outputs
-        pooled_output = bert_outputs[:, 0, :]
+        sequence_output, pooled_output = bert_outputs[:2]
+        # print('pooled_output:' , pooled_output.isnan().any())
+        # sequence_output = bert_outputs
+        # pooled_output = bert_outputs[:, 0, :]
         state_pos = state_positions[:, :, None].expand(-1, -1, sequence_output.size(-1))
         state_output = torch.gather(sequence_output, 1, state_pos)
+
         state_scores = self.action_cls(self.dropout(state_output))  # B,J,4
         if self.exclude_domain:
             domain_scores = torch.zeros(1, device=input_ids.device)  # dummy
@@ -141,8 +156,8 @@ class Decoder(nn.Module):
                 _, hidden = self.gru(w, hidden.contiguous())  # 1,B,D
                 # B,T,D * B,D,1 => B,T
                 attn_e = torch.bmm(encoder_output, hidden.permute(1, 2, 0))  # B,T,1
-                # attn_e = attn_e.squeeze(-1).masked_fill(mask, -1e9)
-                attn_e = attn_e.squeeze(-1).masked_fill(mask, -1e4)  # mixed precision 적용 위해
+                attn_e = attn_e.squeeze(-1).masked_fill(mask, -1e9)
+                # attn_e = attn_e.squeeze(-1).masked_fill(mask, -1e4)   # mixed precision 적용 위해
                 attn_history = nn.functional.softmax(attn_e, -1)  # B,T
 
                 # B,D * D,V => B,V

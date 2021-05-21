@@ -112,7 +112,7 @@ def model_evaluation(model, test_data, tokenizer, slot_meta, epoch, op_code='4',
         # print(state_position_ids)
 
         d_gold_op, _, _ = make_turn_label(slot_meta, last_dialog_state, i.gold_state,
-                                          tokenizer, op_code, dynamic=True) # 여기는 왜 dynamic True일까?
+                                          tokenizer, op_code, dynamic=True) # 여기는 왜 dynamic True일까? test_data_raw에서 바로 불러왔기 때문에 형식이 '도메인-슬롯-밸류'이기 때문에 동적 변환
         gold_op_ids = torch.LongTensor([d_gold_op]).to(device)
 
         start = time.perf_counter()
