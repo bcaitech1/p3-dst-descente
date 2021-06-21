@@ -12,7 +12,7 @@ def make_WOS_like_WOZ(file_path='./train_dials.json', is_eval=False, dev_split=0
     new_dial = []
     for dial_dict in tqdm(dials):    
         transformed_dialogue = {}
-        transformed_dialogue['dialogue_idx'] = dial_dict['dialogue_idx']
+        transformed_dialogue['dialogue_idx'] = dial_dict['guid']
         transformed_dialogue['domains'] = dial_dict['domains']
         dials = []
         last_bs = []
@@ -29,21 +29,21 @@ def make_WOS_like_WOZ(file_path='./train_dials.json', is_eval=False, dev_split=0
             dial['system_transcript'] = sys_dial["text"]
             dial['turn_idx'] = idx
             dial['belief_state'] = []
-            if not is_eval:
-                for s in user_dial['state']:
-                    slots = []
-                    states = s.split('-')
-                    slot = states[0]+'-'+states[1] # 관광-숙소
-                    value = states[2] # 호텔
-                    slots.append([slot, value])
-                    dial['belief_state'].append({"slots": slots, "act":"inform"})
-                dial['turn_label'] = [bs["slots"][0] for bs in dial['belief_state'] if bs not in last_bs] 
-                # domain transition을 고려한 turn domain 
-                crnt_domain = get_domain(i, dialogue, last_domain)
-                dial['domain'] = crnt_domain
-                last_domain = crnt_domain
-            else:
-                dial['domain'] = "관광"  # dummy domain
+#             if not is_eval:
+            for s in user_dial['state']:
+                slots = []
+                states = s.split('-')
+                slot = states[0]+'-'+states[1] # 관광-숙소
+                value = states[2] # 호텔
+                slots.append([slot, value])
+                dial['belief_state'].append({"slots": slots, "act":"inform"})
+            dial['turn_label'] = [bs["slots"][0] for bs in dial['belief_state'] if bs not in last_bs] 
+            # domain transition을 고려한 turn domain 
+            crnt_domain = get_domain(i, dialogue, last_domain)
+            dial['domain'] = crnt_domain
+            last_domain = crnt_domain
+#             else:
+#                 dial['domain'] = "관광"  # dummy domain
             dial['transcript'] = user_dial['text']
             dial['system_acts'] = []          
             last_bs = dial['belief_state']
@@ -129,5 +129,5 @@ def create_skfold_dataset_idx(data, k):
             
 if __name__=='__main__':
     # make_WOS_like_WOZ(is_eval=False, dev_split=0.1, k=2)
-    make_WOS_like_WOZ('./eval_dials.json', is_eval=True)
+    make_WOS_like_WOZ('../input/wos-v1_train.json', is_eval=False)
     # make_WOS_like_WOZ('../eval_dataset/eval_dials.json', is_eval=True)

@@ -21,7 +21,7 @@ import time
 import argparse
 import json
 from copy import deepcopy
-from transformers import BertTokenizer, BertModel, ElectraModel, ElectraTokenizer, PretrainedConfig
+from transformers import BertTokenizer, BertModel, AutoModel, AutoTokenizer, AutoConfig, PretrainedConfig
 import pickle
 # from tokenization_kobert import KoBertTokenizer
 
@@ -29,20 +29,23 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def main(args):
-    ontology = json.load(open(args.ontology_data))
-    slot_meta = json.load(open(args.slot_meta))
-    tokenizer = ElectraTokenizer.from_pretrained("monologg/koelectra-base-v3-discriminator", additional_special_tokens = ['[SLOT]', '[NULL]','[EOS]', ' ; '])
+    ontology = json.load(open(os.path.join(args.data_root,args.ontology_data)))
+    slot_meta = json.load(open(os.path.join(args.data_root,args.slot_meta)))
+    tokenizer = ElectraTokenizer.from_pretrained(args.model_config_path, additional_special_tokens = ['[SLOT]', '[NULL]','[EOS]', ' ; '])
     data = prepare_dataset(os.path.join(args.data_root, args.test_data),
                            tokenizer,
                            slot_meta, args.n_history, args.max_seq_length, args.op_code)
 
     
-    model_config = PretrainedConfig.from_json_file(args.bert_config_path)
+    # model_config = PretrainedConfig.from_json_file(args.model_config_path)
+    model_config = PretrainedConfig.from_pretrained(args.model_config_path)
+    model_config.vocab_size += 4
+    model_config.model_config_path = args.model_config_path
     model_config.dropout = 0.1
     op2id = OP_SET[args.op_code]
-    model = SomDST(model_config, len(op2id), len(domain2id), op2id['update'])
-    # ckpt = torch.load(args.model_ckpt_path, map_location='cpu')
-    # model.load_state_dict(ckpt)
+    model = SomDST(model_config, len(op2id), len(domain2id), op2id['update'], args.exclude_domain)
+    ckpt = torch.load(args.model_ckpt_path, map_location='cpu')
+    model.load_state_dict(ckpt, strict=False)
 
     model.eval()
     model.to(device)
@@ -240,18 +243,19 @@ def model_evaluation(model, test_data, tokenizer, slot_meta, epoch, op_code='4',
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default='data/WizardOfSeoul', type=str)
-    parser.add_argument("--train_data", default='new_train_dials.json', type=str)
-    parser.add_argument("--dev_data", default='new_dev_dials.json', type=str)
-    parser.add_argument("--test_data", default='new_test_dials.json', type=str)
+    parser.add_argument("--data_root", default='data', type=str)  #
+    parser.add_argument("--train_data", default='train_dials.json', type=str)
+    parser.add_argument("--dev_data", default='dev_dials.json', type=str)
+    parser.add_argument("--test_data", default='dev_dials.json', type=str)
     parser.add_argument("--ontology_data", default='ontology.json', type=str)
     parser.add_argument("--slot_meta", default='slot_meta.json', type=str)
-    parser.add_argument("--bert_config_path", default='assets/koelectra_base.json', type=str)
+    parser.add_argument("--model_config_path", default='klue/roberta-base', type=str) #
+    parser.add_argument("--model_ckpt_path", default='outputs/model_best.bin', type=str)
     parser.add_argument("--save_dir", default='outputs', type=str)
 
     parser.add_argument("--op_code", default="4", type=str)
     parser.add_argument("--slot_token", default="[SLOT]", type=str)
-    parser.add_argument("--dropout", default=0.1, tpe=float)
+    parser.add_argument("--dropout", default=0.1, type=float)
     parser.add_argument("--hidden_dropout_prob", default=0.1, type=float)
     parser.add_argument("--attention_probs_dropout_prob", default=0.1, type=float)
     parser.add_argument("--decoder_teacher_forcing", default=0.5, type=float)

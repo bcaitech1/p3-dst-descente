@@ -127,3 +127,17 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# checkpoint
+*.pth
+*.bin
+
+# checkpoint folder
+results/
+# raw_data folder
+raw_data/
+
+# wandb log file
+wandb/
+
+
