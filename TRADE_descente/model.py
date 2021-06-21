@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import ElectraModel, AutoModel
-
+# from transformers.modeling_bert import BertOnlyMLMHead
 
 def masked_cross_entropy_for_value(logits, target, pad_idx=0):
     mask = target.ne(pad_idx)
@@ -20,6 +20,7 @@ def masked_cross_entropy_for_value(logits, target, pad_idx=0):
 class TRADE(nn.Module):
     def __init__(self, config, tokenized_slot_meta, pad_idx=0):
         super(TRADE, self).__init__()
+        self.config = config
         self.encoder = AutoModel.from_pretrained(config.model_name_or_path)
 
         self.decoder = SlotGenerator(
@@ -35,9 +36,11 @@ class TRADE(nn.Module):
         self.decoder.set_slot_idx(tokenized_slot_meta)  # toknized_slot_meta의 길이가 동일하도록 padding하고 slot_embed_idx로 설정
         self.tie_weight()
         
+#         self.mlm_head = BertOnlyMLMHead(config)
+
     def set_subword_embedding(self, model_name_or_path):
         # PLM에서 Subword embedding layer만 초기화해서 사용
-        model = ElectraModel.from_pretrained(model_name_or_path)
+        model = AutoModel.from_pretrained(model_name_or_path)
         self.encoder.embed.weight = model.embeddings.word_embeddings.weight
         self.tie_weight()
 
@@ -47,7 +50,17 @@ class TRADE(nn.Module):
             self.decoder.proj_layer.weight = self.encoder.proj_layer.weight
 
     def forward(self, input_ids, token_type_ids, attention_mask=None, max_len=10, teacher=None):
-        encoder_outputs, pooled_output = self.encoder(input_ids=input_ids)
+        outputs =  self.encoder(input_ids=input_ids, output_hidden_states=True)
+        
+        # electra case
+        if 'electra' in self.config.model_name_or_path: 
+            encoder_outputs = outputs[0]  # outputs.last_hidden_state
+            pooled_output = outputs[0][:, 0, :]  # outputs.pooler_output
+        else:
+            encoder_outputs = outputs.last_hidden_state
+#             print(encoder_outputs.shape)
+            pooled_output = outputs.pooler_output
+
         all_point_outputs, all_gate_outputs = self.decoder(
             input_ids,
             encoder_outputs,
@@ -56,8 +69,43 @@ class TRADE(nn.Module):
             max_len,
             teacher,
         )
+        # all_point_outputs: 생성된 value의 id
+        # all_gate_outputs: gate output
+
         return all_point_outputs, all_gate_outputs
 
+    @staticmethod
+    def mask_tokens(inputs, tokenizer, config, mlm_probability=0.15):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # 임시로 추가
+        """ Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original. """
+        labels = inputs.clone()
+        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+        probability_matrix = torch.full(labels.shape, mlm_probability).to(device)
+        #special_tokens_mask = [tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()]
+
+        probability_matrix.masked_fill_(torch.eq(labels, 0), value=0.0)
+
+        masked_indices = torch.bernoulli(probability_matrix).bool()
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).to(device=device, dtype=torch.bool) & masked_indices
+        inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(["[MASK]"])[0]
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).to(device=device, dtype=torch.bool) & masked_indices & ~indices_replaced
+        random_words = torch.randint(config.vocab_size, labels.shape, device=device, dtype=torch.long)
+        inputs[indices_random] = random_words[indices_random].to(device)
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+    
+    def forward_pretrain(self, input_ids, tokenizer):
+        input_ids, labels = self.mask_tokens(input_ids, tokenizer, self.config)
+        encoder_outputs, _ = self.encoder(input_ids=input_ids)
+        mlm_logits = self.mlm_head(encoder_outputs)
+        
+        return mlm_logits, labels
 
 class SlotGenerator(nn.Module):
     def __init__(
@@ -98,7 +146,7 @@ class SlotGenerator(nn.Module):
                 gap = max_length - len(idx)
                 idx.extend([self.pad_idx] * gap)
             whole.append(idx)
-        self.slot_embed_idx = whole
+        self.slot_embed_idx = whole  # torch.LongTensor(whole)
 
     def embedding(self, x):
         x = self.embed(x)
@@ -109,26 +157,28 @@ class SlotGenerator(nn.Module):
     def forward(
         self, input_ids, encoder_output, hidden, input_masks, max_len, teacher=None
     ):
-        input_masks = input_masks.ne(1)
+        # max_len == max(len(input_id))
+        input_masks = input_masks.ne(1)  # [batch_size, max(len(input_id))]
         # J, slot_meta : key : [domain, slot] ex> LongTensor([1,2])
         # J,2
         batch_size = encoder_output.size(0)
-        slot = torch.LongTensor(self.slot_embed_idx).to(input_ids.device)
+        slot = torch.LongTensor(self.slot_embed_idx).to(input_ids.device)  # [45, max(len(tokenized_slot))]
 
         # slot별 tokenized embedding 결과를 합한 것
-        slot_e = torch.sum(self.embedding(slot), 1)
-        J = slot_e.size(0)
+        slot_e = torch.sum(self.embedding(slot), 1)  # J,d  [45, embedding_size]
+        J = slot_e.size(0)  # 45
 
+        # 만들어내야하는 tensor의 shape의 zero tensor place holder로 미리 만들어 놓음
         all_point_outputs = torch.zeros(batch_size, J, max_len, self.vocab_size).to(
             input_ids.device
-        )
+        )  # max_len = max(len(input_id)
         
         # Parallel Decoding
-        w = slot_e.repeat(batch_size, 1).unsqueeze(1)
-        hidden = hidden.repeat_interleave(J, dim=1)
-        encoder_output = encoder_output.repeat_interleave(J, dim=0)
-        input_ids = input_ids.repeat_interleave(J, dim=0)
-        input_masks = input_masks.repeat_interleave(J, dim=0)
+        w = slot_e.repeat(batch_size, 1).unsqueeze(1)  # [45*batch_size, 1, embedding_size*1]
+        hidden = hidden.repeat_interleave(J, dim=1)  # [1, batch_size*J, hidden_size]
+        encoder_output = encoder_output.repeat_interleave(J, dim=0)  # [batch_size*J, max_len, hidden_size]
+        input_ids = input_ids.repeat_interleave(J, dim=0)  # [batch_size*J, max_len]
+        input_masks = input_masks.repeat_interleave(J, dim=0)  # [batch_size*J, max_len]
         for k in range(max_len):  # k: decoding step
             w = self.dropout(w)
             # dialogue context와 slot에 대한 정보 fusion (pooled_output)
@@ -136,7 +186,9 @@ class SlotGenerator(nn.Module):
 
             # B,T,D * B,D,1 => B,T
             attn_e = torch.bmm(encoder_output, hidden.permute(1, 2, 0))  # B,T,1
+            #attn_e = attn_e.squeeze(-1).masked_fill(input_masks, -1e9)
             attn_e = attn_e.squeeze(-1).masked_fill(input_masks, -1e4)
+            # P_history 분포, 토큰이 나올 확률
             attn_history = F.softmax(attn_e, -1)  # B,T
 
             if self.proj_layer:
@@ -144,6 +196,7 @@ class SlotGenerator(nn.Module):
             else:
                 hidden_proj = hidden
 
+            # 전체 vocab에서 토큰이 나올 확률률
            # B,D * D,V => B,V
             attn_v = torch.matmul(
                 hidden_proj.squeeze(0), self.embed.weight.transpose(0, 1)

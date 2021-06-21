@@ -18,7 +18,6 @@ import re
 
 
 
-
 @dataclass
 class OntologyDSTFeature:
     guid: str
@@ -58,8 +57,8 @@ def load_dataset(dataset_path, dev_split=0.1):
 
     dom_mapper = defaultdict(list)
     for d in data:
-        dom_mapper[len(d["domains"])].append(d["dialogue_idx"])
-
+#         dom_mapper[len(d["domains"])].append(d["dialogue_idx"]) 
+        dom_mapper[len(d["domains"])].append(d["guid"]) 
     #num_per_domain_trainsition = int(num_dev / 3)
     num_per_domain_trainsition = int(num_dev / len(dom_mapper.keys()))
     dev_idx = []
@@ -69,7 +68,45 @@ def load_dataset(dataset_path, dev_split=0.1):
 
     train_data, dev_data = [], []
     for d in data:
-        if d["dialogue_idx"] in dev_idx:
+#         if d["dialogue_idx"] in dev_idx:
+        if d["guid"] in dev_idx:
+            dev_data.append(d)
+        else:
+            train_data.append(d)
+
+    dev_labels = {}
+    for dialogue in dev_data:
+        d_idx = 0
+#         guid = dialogue["dialogue_idx"]
+        guid = dialogue["guid"]
+        for idx, turn in enumerate(dialogue["dialogue"]):
+            if turn["role"] != "user":
+                continue
+
+            state = turn.pop("state")
+
+            guid_t = f"{guid}-{d_idx}"
+            d_idx += 1
+
+            dev_labels[guid_t] = state
+
+    return train_data, dev_data, dev_labels
+
+
+def custom_load_dataset(dataset_path, dev_split=0.1, k=0):
+    data = json.load(open(dataset_path))
+    num_data = len(data)
+    num_dev = int(num_data * dev_split)
+    if not num_dev:
+        return data, []  # no dev dataset
+
+    
+    train_data, dev_data = [], []
+    
+    train_idx, dev_idx = create_skfold_dataset_idx(data, k)
+
+    for i, d in enumerate(data):
+        if i in dev_idx:
             dev_data.append(d)
         else:
             train_data.append(d)
@@ -90,6 +127,25 @@ def load_dataset(dataset_path, dev_split=0.1):
             dev_labels[guid_t] = state
 
     return train_data, dev_data, dev_labels
+
+
+def extract_label(dataset):
+    dev_labels = {}
+    for dialogue in dataset:
+        d_idx = 0
+        guid = dialogue["guid"]
+        for idx, turn in enumerate(dialogue["dialogue"]):
+            if turn["role"] != "user":
+                continue
+
+            state = turn.pop("state")
+
+            guid_t = f"{guid}-{d_idx}"
+            d_idx += 1
+
+            dev_labels[guid_t] = state
+    
+    return dev_labels
 
 
 def set_seed(seed):
@@ -301,6 +357,8 @@ class YamlConfigManager:
 def remove_space(text):
     # 특수문자 (, ), =, & 디코딩 이후 생기는 공백 후처리
     text = re.sub('\s(?=[\=\(\)\&])|(?<=[\=\(\)\&])\s', '', text)
+    text = text.replace(" : ", ":")
+    text = text.replace(" , ", ", ")
     return text
 
 
@@ -326,7 +384,8 @@ def input_id_masking(input_ids, tokenizer):
 
 
 def custom_get_example_from_dialogue(dialogue, user_first=False):
-    guid = dialogue["dialogue_idx"]
+#     guid = dialogue["dialogue_idx"]
+    guid = dialogue["guid"]
     examples = []
     history = []
     d_idx = 0
@@ -372,3 +431,21 @@ def custom_get_examples_from_dialogues(data, user_first=False, dialogue_level=Fa
     return examples
 
 
+def custom_to_mask(input_ids):
+    SEP_ID = 3
+    MASK_ID = 4
+    for input_id in input_ids:
+        sep_idx = (input_id == SEP_ID).nonzero(as_tuple=False)[1]
+        if sep_idx - 3 > 4:
+            # for i in range(len(current_id)):
+            mask_idxs = set()
+            while len(mask_idxs) <= 3:
+                rand_idx = random.randrange(2, sep_idx)
+                if rand_idx == sep_idx:
+                    continue
+                mask_idxs.add(rand_idx)
+
+            for mask_idx in list(mask_idxs):
+                input_id[mask_idx] = MASK_ID
+
+    return input_ids
