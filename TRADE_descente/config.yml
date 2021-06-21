@@ -1,5 +1,5 @@
 base:
-  data_dir: "../input/data/train_dataset"
+  data_dir: "../input"
   model_dir: "results"
   train_batch_size: 4
   eval_batch_size: 8
@@ -12,7 +12,7 @@ base:
   n_gate: 5
   teacher_forcing_ratio: 0.5
 
-  model_name_or_path: 'dsksd/bert-ko-small-minimal'
+  model_name_or_path: 'klue/bert-base' 
   # 만약 지정되면 기존의 hidden_size는 embedding dimension으로 취급되고, proj_dim이 GRU의 hidden_size로 사용됨. hidden_size보다 작아야 함.
   proj_dim: None
 
@@ -22,4 +22,4 @@ base:
   num_k: 0
   val_ratio: 0.1
   scheduler: "Linear"
-  mask: True
+  mask: True  # electra-discriminator는 False로 해야함
