@@ -1,19 +1,21 @@
 # KLUE-DST Benchmark for TRADE & SOM-DST
 
+![Generic badge](https://img.shields.io/badge/unstable-v1.0.0-orange.svg)
 <p align='center'><img src="https://user-images.githubusercontent.com/37925813/122718082-74730b00-d2a7-11eb-90ef-d2ab562b172b.png" width=300px></p>
 
 2021년 5월 21일 공개된 KLUE 데이터셋 중, `wos`(wizard of seoul) 데이터셋에 대한 벤치마크 스코어를 도출 및 기록하였습니다.
-사용한 Pretrained Language Model은 KLUE에서 공개한 `KLUE/BERT-base`, `KLUE/RoBERTa-base`, `KLUE/RoBERTa-large` 입니다. (추후 `KLUE/RoBERTa-small` 및 `koelectra-base` 추가 예정입니다.) 
+사용한 Pretrained Language Model은 KLUE에서 공개한 `KLUE/BERT-base`, `KLUE/RoBERTa-base`, `KLUE/RoBERTa-large` 입니다. (추후 `KLUE/RoBERTa-small` 및 `KoELECTRA-base` 추가 예정입니다.) 
 <br>
 
 <p align='center'><img src="https://user-images.githubusercontent.com/37925813/122719518-3d9df480-d2a9-11eb-933c-28feb7df49d5.png" width=800px></p>
 <br>
 
-현재 KLUE Leader Board가 활성화되지 않은 관계로, 해당 벤치마크 스코어는 `dev set`에 대한 스코어임을 알려드립니다. (추후 Test Set 공개 시 스코어를 수정할 예정입니다.)
+현재 KLUE Leader Board가 활성화되지 않은 관계로, 해당 벤치마크 스코어는 `dev set`에 대한 스코어를 기준으로 작성되었습니다.<br> 
+(추후 Test Set 공개 시 스코어를 수정할 예정입니다.)
 
 <br>
 
-## Requirements
+## 0. Requirements
 - python 3.7
 - torch==1.8.0
 - transformers==4.6.1
@@ -21,6 +23,7 @@
 <br>
 
 ## 1. Benchmark Score for TRADE & SOM-DST (on dev set)
+
 | DST Model            | Pretrained Language Model | Epoch | Batch Size | Learning Rate           | JGA    | Slot F1 |
 | -------------------- | ------------------------- | ----- | ---------- | ----------------------- | ------ | ------- |
 | TRADE<br>(improved)  | KLUE/BERT-base            | 30    | 4          | 3e-5                    | 0.6401 | 0.9521  |
@@ -66,7 +69,8 @@ wos-v1 dev set에 대한 ontology 및 dialogues EDA를 수행하면서 총 4가�
 이에 대한 개선방안을 논의해본 결과, 아래와 같은 개선방안을 제시해보고자 하였습니다.<br><br>
 <p align='center'><img src="https://user-images.githubusercontent.com/37925813/122722016-39bfa180-d2ac-11eb-89fa-e7273331b115.png" width=800px></p>
 <br>
-이 중, 가장 많은 비중을 차지하고 있는 3번(simple mistakes) 문제점을 일부 수정하여 `edited dev set`을 만들었고, 이에 대한 벤치마크 스코어를 아래의 표와 같이 새로 도출해보았습니다.<br><br>
+이 중, 가장 많은 비중을 차지하고 있는 3번(simple mistakes) 문제점을 일부 수정하여 edited dev set을 만들었고, 이에 대한 벤치마크 스코어를 아래의 표와 같이 새로 도출해보았습니다.<br><br>
 <p align='center'><img src="https://user-images.githubusercontent.com/37925813/122722614-e568f180-d2ac-11eb-9e1a-badd9c2042b7.png" width=1000px></p><br>
-<br>
-모델에 따라 JGA 기준으로 1.5%p ~ 2.36%p 정도의 스코어 향상을 나타냈습니다.
+
+모델에 따라 JGA 기준으로 1.5%p ~ 2.36%p 정도의 스코어 향상을 나타냈습니다.<br>
+추후 동일 결과를 재현할 수 있도록 코드 업데이트 예정입니다. 👀
