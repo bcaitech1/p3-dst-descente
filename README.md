@@ -73,4 +73,6 @@ wos-v1 dev set에 대한 ontology 및 dialogues EDA를 수행하면서 총 4가�
 <p align='center'><img src="https://user-images.githubusercontent.com/37925813/122722614-e568f180-d2ac-11eb-9e1a-badd9c2042b7.png" width=1000px></p><br>
 
 모델에 따라 JGA 기준으로 1.5%p ~ 2.36%p 정도의 스코어 향상을 나타냈습니다.<br>
-추후 동일 결과를 재현할 수 있도록 코드 업데이트 예정입니다. 👀
+추후 동일 결과를 재현할 수 있도록 코드 업데이트 예정입니다. 👀<br>
+## 4. Contact
+관련 질문이나 문의는 양명한(suneverset@naver.com) 혹은 태영돈(taepd1@gmail.com)에게 남겨주시면 답변드리겠습니다. 
