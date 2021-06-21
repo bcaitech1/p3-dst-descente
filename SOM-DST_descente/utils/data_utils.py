@@ -16,7 +16,7 @@ from .fix_label import fix_general_label_error
 import pdb
 
 flatten = lambda x: [i for s in x for i in s]
-EXPERIMENT_DOMAINS = ['관광', '숙소', '식당', '지하철', '택시'] # ["hotel", "train", "restaurant", "attraction", "taxi"]
+EXPERIMENT_DOMAINS = ['관광', '숙소', '식당', '지하철', '택시', ""] # ["hotel", "train", "restaurant", "attraction", "taxi"]
 domain2id = {d: i for i, d in enumerate(EXPERIMENT_DOMAINS)}
 
 OP_SET = {
@@ -43,16 +43,12 @@ def make_turn_label(slot_meta, last_dialog_state, turn_dialog_state,
     keys = list(turn_dialog_state.keys())  # ('관광-종류', '관광-지역')
     for k in keys:
         v = turn_dialog_state[k] # 이번 대화의 slot value  # '공원'
-        # print('############')
-        # print('v: ', v)
-        # print('############')
 
         if v == 'none':
             turn_dialog_state.pop(k) 
             continue
         vv = last_dialog_state.get(k) # 전 대화에서 가져온 slot value
-        # print('vv', vv)
-        # pdb.set_trace()  
+
         try:
             idx = slot_meta.index(k) # slot meta에서 인덱스를 찾는다.
             if vv != v:
@@ -171,15 +167,15 @@ def prepare_dataset(data_path, tokenizer, slot_meta,
         dialog_history = []
         last_dialog_state = {}
         last_uttr = ""
-        tmp = 0  # WOS 변환 때문에 임시적으로 추가한 변수
+        # tmp = 0  # WOS 변환 때문에 임시적으로 추가한 변수
         for ti, turn in enumerate(dial_dict["dialogue"]): # 
             turn_domain = turn["domain"]
             if turn_domain not in EXPERIMENT_DOMAINS:  # turn domain이 없는 경우 (ex)그냥 인사만 한 상태) "" 빈 문자열 처리할 경우 여기서 누락되는 문제 생김 
-                if turn["turn_idx"] == 0:  # 임시 추가 코드   index가 1부터 시작하게 되면서, 새 dialogue처리가 제대로 안됨. last_dialogue_state 를 evaluation에서 초기화 못함                                                     
-                    tmp -= 1                # 임시 추가 코드   그렇다고 임의의 도메인을 넣기도 애매하니, 전체적으로 1씩 낮춰줌
+                # if turn["turn_idx"] == 0:  # 임시 추가 코드   index가 1부터 시작하게 되면서, 새 dialogue처리가 제대로 안됨. last_dialogue_state 를 evaluation에서 초기화 못함                                                     
+                #     tmp -= 1                # 임시 추가 코드   그렇다고 임의의 도메인을 넣기도 애매하니, 전체적으로 1씩 낮춰줌
                 continue                               
             
-            turn_id = turn["turn_idx"] + tmp
+            turn_id = turn["turn_idx"]
             turn_uttr = (turn["system_transcript"] + ' ; ' + turn["transcript"]).strip()
             # turn_uttr = (turn["transcript"] + ' ; ' + turn["system_transcript"]).strip()
             dialog_history.append(last_uttr)
@@ -268,15 +264,13 @@ class TrainingInstance:
                       word_dropout=0., slot_token='[SLOT]'):
         if max_seq_length is None:
             max_seq_length = self.max_seq_length
-        # print('max_seq_length: ', max_seq_length)
-        # pdb.set_trace()
 
         state = []  # state 길이만 256을 넘음
         for s in self.slot_meta:
             state.append(slot_token)
             k = s.split('-')
             v = self.last_dialog_state.get(s)
-            # print(v)
+
             if v is not None:
                 k.extend(['-', v])
                 t = tokenizer.tokenize(' '.join(k))
@@ -395,8 +389,9 @@ class MultiWozDataset(Dataset):
         domain_ids = torch.LongTensor([f.domain_id for f in batch])#, dtype=torch.long)
         gen_ids = [b.generate_ids for b in batch]
         # max_value error 방지 위해 default=0 추가
-        max_update = max([len(b) for b in gen_ids], defalut=0)
+        max_update = max([len(b) for b in gen_ids], default=0)
         max_value = max([len(b) for b in flatten(gen_ids)], default=0)
+        
         for bid, b in enumerate(gen_ids):
             n_update = len(b)
             for idx, v in enumerate(b):

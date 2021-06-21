@@ -6,7 +6,7 @@ MIT license
 
 import torch
 import torch.nn as nn
-from transformers import ElectraModel, ElectraTokenizer, PreTrainedModel
+from transformers import ElectraModel, ElectraTokenizer, PreTrainedModel, AutoModel, AutoTokenizer
 
 
 class SomDST(PreTrainedModel):
@@ -45,10 +45,14 @@ class Encoder(nn.Module):
         self.exclude_domain = exclude_domain
 
         ################## IF USING Electra, then #########################
-        self.tokenizer = ElectraTokenizer.from_pretrained("monologg/koelectra-base-v3-discriminator", additional_special_tokens = ['[SLOT]', '[NULL]','[EOS]', ' ; ']) 
-        self.bert = ElectraModel.from_pretrained("monologg/koelectra-base-v3-discriminator")
-        self.bert.resize_token_embeddings(len(self.tokenizer))
+#         self.tokenizer = ElectraTokenizer.from_pretrained("monologg/koelectra-base-v3-discriminator", additional_special_tokens = ['[SLOT]', '[NULL]','[EOS]', ' ; ']) 
+#         self.bert = ElectraModel.from_pretrained("monologg/koelectra-base-v3-discriminator")
+#         self.bert.resize_token_embeddings(len(self.tokenizer))
         ###################################################################
+    
+        self.tokenizer = AutoTokenizer.from_pretrained(config.model_config_path, additional_special_tokens = ['[SLOT]', '[NULL]','[EOS]', ' ; ']) 
+        self.bert = AutoModel.from_pretrained(config.model_config_path)
+        self.bert.resize_token_embeddings(len(self.tokenizer))
 
         self.dropout = nn.Dropout(config.dropout)
         self.action_cls = nn.Linear(config.hidden_size, n_op)
@@ -62,7 +66,9 @@ class Encoder(nn.Module):
                 state_positions, attention_mask,
                 op_ids=None, max_update=None):
 
-        bert_outputs = self.bert(input_ids, token_type_ids, attention_mask)[0] # Batch x Max_Seq_length x hidden size
+#         bert_outputs = self.bert(input_ids, token_type_ids, attention_mask)[0] # Batch x Max_Seq_length x hidden size
+        # roberta는 token_type_ids가 없음
+        bert_outputs = self.bert(input_ids, attention_mask)[0] # Batch x Max_Seq_length x hidden size
         sequence_output = bert_outputs
         pooled_output = bert_outputs[:, 0, :]
         state_pos = state_positions[:, :, None].expand(-1, -1, sequence_output.size(-1))

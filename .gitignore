@@ -132,9 +132,12 @@ dmypy.json
 *.pth
 *.bin
 
+# checkpoint folder
+results/
 # raw_data folder
 raw_data/
 
 # wandb log file
 wandb/
+
 
